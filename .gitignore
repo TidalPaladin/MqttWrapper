@@ -2,3 +2,4 @@
 .piolibdeps
 .vscode
 platformio.ini
+.vscode/c_cpp_properties.json

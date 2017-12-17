@@ -91,15 +91,21 @@ MqttTopic &MqttTopic::callback(mqtt_callback_t callback) {
 // }
 
 void MqttTopic::loop() {
+    static bool previous_state = false;
     if( !_sClient.connected() ) {
-        if(_onDisconnect) _onDisconnect;
-        if( !_sClient.connect(_ID) ) {
-            if(_onConnect) _onConnect();
-            return;
+
+        if(previous_state) {
+            previous_state = !previous_state;
+            if(_onDisconnect) _onDisconnect();
         }
 
-        for( auto i : _sTopics ) {
-            i.second->_resubscribe();
+        if( _sClient.connect(_ID) ) {
+            previous_state = true;
+            for( auto i : _sTopics ) {
+                i.second->_resubscribe();
+            }
+            if(_onConnect) _onConnect();
+            return;
         }
     }
     _sClient.loop();
