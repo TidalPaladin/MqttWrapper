@@ -4,17 +4,11 @@
 #include "MqttTopic.h"
 
 
-template<class T> inline Print &operator <<(Print &obj, T arg) { obj.print(arg); return obj; }
-
-
-
 void setup() {
     
     Serial.begin(115200);
-    WiFi.begin("Bowser", "Bowser1993");
-    delay(2000);
-    Serial.println("Connected"); 
-
+    WiFi.begin("SSID", "PASS");
+    
     static MqttTopic light_state("test");    
     static MqttTopic light_command("test2");   
 
@@ -27,7 +21,7 @@ void setup() {
         light_state.publish("OFF");
     });
 
-    MqttTopic::setServer("192.168.1.238", 1883);
+    MqttTopic::setServer("SERVER", 1883);
 }
 
 void loop() {

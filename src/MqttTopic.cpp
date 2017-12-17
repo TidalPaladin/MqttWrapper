@@ -6,7 +6,7 @@ WiFiClient MqttTopic::_sEspCli;
 PubSubClient MqttTopic::_sClient("dummyServer", 0, _sCallback, _sEspCli);
 const char* MqttTopic::_ID = String(ESP.getChipId()).c_str();
 
-mqtt_callback_t MqttTopic:_onConnect, MqttTopic:_onDisconnect;
+mqtt_callback_t MqttTopic::_onConnect, MqttTopic::_onDisconnect;
 
 MqttTopic::MqttTopic(mqtt_topic_t topic)
 :
