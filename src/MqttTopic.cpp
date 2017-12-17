@@ -6,6 +6,8 @@ WiFiClient MqttTopic::_sEspCli;
 PubSubClient MqttTopic::_sClient("dummyServer", 0, _sCallback, _sEspCli);
 const char* MqttTopic::_ID = String(ESP.getChipId()).c_str();
 
+mqtt_callback_t MqttTopic:_onConnect, MqttTopic:_onDisconnect;
+
 MqttTopic::MqttTopic(mqtt_topic_t topic)
 :
 _TOPIC(topic)
@@ -90,9 +92,9 @@ MqttTopic &MqttTopic::callback(mqtt_callback_t callback) {
 
 void MqttTopic::loop() {
     if( !_sClient.connected() ) {
-        _onDisconnect();
+        if(_onDisconnect) _onDisconnect;
         if( !_sClient.connect(_ID) ) {
-            _onConnect();
+            if(_onConnect) _onConnect();
             return;
         }
 
