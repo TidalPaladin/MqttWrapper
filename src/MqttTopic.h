@@ -21,12 +21,11 @@
 #include <string>
 #include <algorithm>
 #include <functional>
+#include <sstream>
 
 typedef PubSubClient mqtt_client_t;
 typedef std::string mqtt_topic_t;
 typedef std::string mqtt_state_t;
-
-
 
 /* For the client handler */
 typedef PubSubClient mqtt_client_t;
@@ -36,6 +35,9 @@ typedef std::function<void()> mqtt_callback_t;
 
 /* Callback list type */
 typedef std::unordered_map<mqtt_state_t, mqtt_callback_t> mqtt_callback_list_t;
+
+/* Handle for a created callback so it can be removed later */
+typedef mqtt_callback_list_t::const_iterator mqtt_callback_ptr_t;  
 
 /**
  * Map each topic to a pair
@@ -70,6 +72,12 @@ public:
      * MQTT client callback function. This function also runs appropriate
      * callbacks on state change
      * 
+     * TODO should this be a private member?
+     * 
+     * @note The difference between state() and publish() is that state()
+     * handles callbacks for an incoming payload while publish() simply
+     * publishes any message on the given topic
+     * 
      * @param payload The new state to set for this topic
      * 
      * @return this
@@ -90,66 +98,90 @@ public:
     const bool publish(const mqtt_state_t payload);
 
     /**
+     * @brief Handles publishing for non string data types
+     * 
+     * @param payload The payload to be published
+     * 
+     * @return bool
+     *   - true if successful
+     *   - false otherwise
+     */
+    template <typename T>
+    const bool publish(const T payload) {
+        // std::ostringstream isnt available so we have to do this
+        return publish(
+            std::string(String(payload).c_str())
+        );
+    }
+
+    /**
      * @brief Adds a payload/callback pair to this topic
      * 
      * @param payload The payload that will trigger the callback
-     * @param callback A pointer to the callback function
+     * @param callback A callback std::function
      *  
-     * @return this
+     * @return A handle that can be used to remove the callback
      */ 
-    MqttTopic &callback(const mqtt_state_t payload, mqtt_callback_t callback);
-    MqttTopic &callback(std::pair<mqtt_state_t, mqtt_callback_t> pair);
+    mqtt_callback_ptr_t callback(const mqtt_state_t payload, mqtt_callback_t callback);
+    mqtt_callback_ptr_t callback(std::pair<mqtt_state_t, mqtt_callback_t> pair);
 
     /**
      * @brief Adds a callback to run on any incoming payload. Use this to handle
-     * callbacks where the payload must be processed using more than basic matching
+     * callbacks where the payload must be processed using more than basic matching.
+     * The callback should accept a mqtt_state_t parameter which will receive the incoming
+     * payload
      * 
      * @note These callbacks are added using an empty payload key, aka std::string("")
      * 
-     * @param callback A pointer to the callback function
+     * @param callback A callback std::function with parameter mqtt_state_t
      * 
-     * @return this
+     * @return A handle that can be used to remove the callback
      */
-    MqttTopic &callback(mqtt_callback_t callback);
+    mqtt_callback_ptr_t callback(std::function<void(mqtt_state_t)> callback);
 
      /**
-      * @brief Removes a payload / callback pair from this topic. You must pass
-      * both payload and callback because the container is a multimap.
+      * @brief Removes a callback using the pointer generated when it was added
+      *
+      * Not currently working - iterators will be invalidated by rehashing
       * 
       * @param payload The payload of the callback to remove
       * @param callback The callback to remove
       * 
       */
-    MqttTopic &remove(const mqtt_state_t payload, mqtt_callback_t * const callback);
-    MqttTopic &remove(std::pair<mqtt_state_t, mqtt_callback_t*> pair);
-    MqttTopic &remove(mqtt_callback_t * const callback);
+    // MqttTopic &remove(mqtt_callback_ptr_t callback);
 
     /**
      * @brief Returns the topic as a string
      * 
+     * @return The MQTT topic for this object
      */
-    const std::string topic() { return _TOPIC; }
-
-    // template <typename... Args>
-    // const int publish(Args... args) {
-    //     return sClient.publish(args...);
-    // }
+    const std::string topic() const { return _TOPIC; }
 
 
-    // template <typename... Args>
-    // static bool connect(Args... args) {
-    //     return sCli
-    // }
-
+    /**
+     * @brief Assigns a MQTT server location
+     * 
+     * @param Perfectly forwarded to PubSubClient
+     * 
+     */
     template <typename... Args>
     static void setServer(Args... args) {
         _sClient.setServer(args...);
     }
 
-    //static int state() { return _sClient.state(); }
+    /**
+     * @brief Fetches the state of the underlying MQTT client
+     * (PubSubClient)
+     * 
+     * @return The status code of the MQTT client
+     */
+    static int clientState() { return _sClient.state(); }
 
-    static PubSubClient *const clientPointer() { return &_sClient; }
-
+    /**
+     * @brief Call this in loop() to maintain MQTT connection
+     * and handle incomding messages
+     * 
+     */
     static void loop();
 
     /**
@@ -170,6 +202,29 @@ public:
      */
     static void onConnect(mqtt_callback_t callback) { _onConnect = callback; }
 
+
+private:
+
+    /**
+     * @brief Resubscribes to the MQTT topic
+     * 
+     * @return
+     *   - true if successful
+     *   - false otherwise
+     */
+    const bool _resubscribe();
+
+    /**
+     * @brief Static function that serves as the highest level callback for MQTT
+     * events. This callback will search all instantiated MqttDevice objects and
+     * take the appropriate actions
+     * 
+     * @param topic The topic on which an event occurred
+     * @param payload A byte array pointer containing the payload
+     * @param length The length of the payload
+     * 
+     */
+    static void _sCallback(char* topic, byte* payload, unsigned int length);
 
 
 private:
@@ -193,29 +248,8 @@ private:
     static PubSubClient _sClient;
     static const char* _ID;
 
-    static void _sHandleConnection();
-
-    /**
-     * @brief Resubscribes to the MQTT topic
-     * 
-     * @return
-     *   - true if successful
-     *   - false otherwise
-     */
-    const bool _resubscribe();
-
-    /**
-     * @brief Static function that serves as the highest level callback for MQTT
-     * events. This callback will search all instantiated MqttDevice objects and
-     * take the appropriate actions
-     * 
-     * @param topic The topic on which an event occurred
-     * @param payload A byte array pointer containing the payload
-     * @param length The length of the payload
-     * 
-     */
-    static void _sCallback(char* topic, byte* payload, unsigned int length);
 
 };
+
 
 #endif
